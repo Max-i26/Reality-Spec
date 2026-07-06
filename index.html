@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RealityFrame // Next-Gen Privacy & AR Hub</title>
+    <link rel="stylesheet" href="/src/style.css" />
+    <!-- Google Fonts for premium typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Space+Grotesk:wght@300;500;700&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div class="app-container">
+      
+      <!-- HEADER -->
+      <header class="app-header">
+        <div class="logo-area">
+          <span class="logo-icon">▢</span>
+          <h1>REALITY<span class="highlight">FRAME</span></h1>
+          <span class="version-tag">v2.0 Web</span>
+        </div>
+        <div class="status-indicator">
+          <span class="status-dot pulsing"></span>
+          <span id="system-status">INITIALIZING SYSTEM</span>
+        </div>
+      </header>
+
+      <!-- MAIN CONTENT GRID -->
+      <main class="app-body" id="app-grid">
+        
+        <!-- LEFT COLUMN: VIDEO CONTAINER -->
+        <section class="video-section">
+          
+          <!-- ONBOARDING STEPPER WIZARD -->
+          <div id="stepper-wizard" class="stepper-card">
+            <div class="stepper-progress-bar">
+              <div id="stepper-progress-line" class="progress-line" style="width: 0%;"></div>
+            </div>
+            <div class="stepper-steps">
+              <div class="step-item active" id="step-1">
+                <span class="step-number">1</span>
+                <span class="step-label">Webcam Access</span>
+              </div>
+              <div class="step-item" id="step-2">
+                <span class="step-number">2</span>
+                <span class="step-label">Calibrate Room</span>
+              </div>
+              <div class="step-item" id="step-3">
+                <span class="step-number">3</span>
+                <span class="step-label">Playground Ready</span>
+              </div>
+            </div>
+            <div id="stepper-instruction" class="stepper-instruction-text">
+              Waiting for camera permissions... Please click "Allow" in your browser.
+            </div>
+          </div>
+
+          <!-- VIEWPORT VIEW -->
+          <div class="viewport-card">
+            <div class="viewport-header">
+              <div class="viewport-header-left">
+                <span class="viewport-title">LIVE FEED VIEWPORT</span>
+                <button id="btn-toggle-sidebar" class="hud-toggle-btn" title="Toggle Immersive Mode">
+                  ⚡ Immersive View
+                </button>
+              </div>
+              <div class="viewport-meta">
+                <span id="resolution-display">0x0</span> @ <span id="fps-display">0</span> FPS
+              </div>
+            </div>
+            
+            <div class="video-container">
+              <!-- Raw Webcam Video (Hidden) -->
+              <video id="webcam" autoplay playsinline muted></video>
+              
+              <!-- Processing Output Canvas -->
+              <canvas id="canvas-output"></canvas>
+              
+              <!-- Overlay Calibration Alert -->
+              <div id="calibration-overlay" class="overlay-hidden">
+                <div class="calibration-content">
+                  <div class="spinner"></div>
+                  <h3 id="calibration-title">CALIBRATING BACKGROUND</h3>
+                  <p id="calibration-subtitle">Step out of the frame...</p>
+                  <div id="calibration-countdown">3</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Diagnostics Matrix (Overlay-like stats bar) -->
+            <div class="diagnostics-panel">
+              <div class="diag-stat">
+                <span class="diag-label">LATENCY</span>
+                <span id="latency-val" class="diag-value">-- ms</span>
+              </div>
+              <div class="diag-stat">
+                <span class="diag-label">ACTIVE MODE</span>
+                <span id="active-mode-val" class="diag-value">NORMAL</span>
+              </div>
+              <div class="diag-stat">
+                <span class="diag-label">GESTURE DETECTED</span>
+                <span id="gesture-val" class="diag-value font-highlight">NONE</span>
+              </div>
+              <div class="diag-stat">
+                <span class="diag-label">PORTAL LOCK</span>
+                <span id="portal-lock-val" class="diag-value">INACTIVE</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- RIGHT COLUMN: SIDEBAR CONTROL DASHBOARD -->
+        <section class="sidebar-section" id="sidebar">
+          
+          <!-- TAB NAVIGATION SYSTEM -->
+          <div class="sidebar-tabs">
+            <button class="tab-btn active" data-tab="setup">⚙️ Setup</button>
+            <button class="tab-btn" data-tab="privacy">👁 Privacy</button>
+            <button class="tab-btn" data-tab="ar">🪐 AR Overlay</button>
+            <button class="tab-btn" data-tab="media">📁 Media</button>
+          </div>
+
+          <!-- TAB CONTENT: SETUP & CALIBRATION -->
+          <div class="tab-content active" id="tab-setup">
+            <div class="control-card">
+              <h3>SYSTEM SETUP</h3>
+              <p class="control-desc">Prepare your camera environment to construct the digital invisibility backdrop.</p>
+              
+              <div class="btn-calibration-container">
+                <button id="btn-recalibrate" class="action-btn glow-cyan">
+                  ⚡ Calibrate Background Backplate
+                </button>
+              </div>
+            </div>
+
+            <div class="control-card">
+              <h3>BACKGROUND MATTING BLUR</h3>
+              <p class="control-desc">Smooth out edges or apply depth blur to the background isolation frame.</p>
+              
+              <div class="settings-slider-group">
+                <div class="slider-header">
+                  <label for="blur-slider">Gaussian Blur Amount</label>
+                  <span id="blur-val">0px</span>
+                </div>
+                <input type="range" id="blur-slider" min="0" max="40" value="0" step="1">
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB CONTENT: PRIVACY FILTER MODES -->
+          <div class="tab-content" id="tab-privacy">
+            <div class="control-card">
+              <h3>INVISIBILITY FILTERS</h3>
+              <p class="control-desc">Switch between privacy overlay modes depending on your workspace environment.</p>
+              
+              <div class="mode-button-group">
+                <button id="btn-mode-normal" class="mode-btn active" data-mode="normal">
+                  <span class="btn-icon">👁</span>
+                  <span class="btn-label">Normal Feed</span>
+                </button>
+                <button id="btn-mode-portal" class="mode-btn" data-mode="portal">
+                  <span class="btn-icon">⬚</span>
+                  <span class="btn-label">Portal Box</span>
+                </button>
+                <button id="btn-mode-full" class="mode-btn" data-mode="full">
+                  <span class="btn-icon">👤</span>
+                  <span class="btn-label">Full Body Mask</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="control-card">
+              <h3>VIRTUAL BACKDROP SELECTOR</h3>
+              <p class="control-desc">Replace your actual room with static captures, depth blur, or high-tech grid textures.</p>
+
+              <div class="bg-selector-group">
+                <div class="bg-thumbnails">
+                  <button class="bg-thumb-btn active" data-bg="static">
+                    <span class="thumb-label">Static BG</span>
+                  </button>
+                  <button class="bg-thumb-btn" data-bg="blur">
+                    <span class="thumb-label">Blur BG</span>
+                  </button>
+                  <button class="bg-thumb-btn" data-bg="cyber">
+                    <span class="thumb-label">Cyber Grid</span>
+                  </button>
+                  <button class="bg-thumb-btn" data-bg="custom">
+                    <span class="thumb-label">Custom Image 📁</span>
+                  </button>
+                </div>
+                <input type="file" id="custom-bg-input" accept="image/*" style="display:none">
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB CONTENT: AUGMENTED REALITY (AR) -->
+          <div class="tab-content" id="tab-ar">
+            <div class="control-card">
+              <h3>AUGMENTED SPATIAL FILTERS</h3>
+              <p class="control-desc">Overlay digital assets mapped to your hand joints or 3D coordinate space.</p>
+              
+              <div class="filter-grid">
+                <button class="filter-btn active" data-ar="none">
+                  <div class="filter-preview none-preview">❌</div>
+                  <span>Disable AR</span>
+                </button>
+                <button class="filter-btn" data-ar="creeper">
+                  <div class="filter-preview creeper-preview"></div>
+                  <span>Pixel Shield</span>
+                </button>
+                <button class="filter-btn" data-ar="cyberhud">
+                  <div class="filter-preview hud-preview"></div>
+                  <span>Cyber HUD</span>
+                </button>
+                <button class="filter-btn" data-ar="orbit3d">
+                  <div class="filter-preview orbit-preview"></div>
+                  <span>Holo-Orbit 3D</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="control-card">
+              <h3>GESTURE MAPPING ENGINE</h3>
+              <p class="control-desc">Configure action shortcuts to trigger dynamically when gestures are recognized.</p>
+              
+              <div class="gesture-binding-list">
+                <div class="binding-row">
+                  <span class="gesture-icon">🤌</span>
+                  <span class="gesture-name">Double-Hand Pinch</span>
+                  <span class="binding-action">Resize Portal</span>
+                </div>
+                <div class="binding-row">
+                  <span class="gesture-icon">👍</span>
+                  <span class="gesture-name">Thumbs Up</span>
+                  <select id="select-thumbs-up" class="binding-select">
+                    <option value="ar-toggle" selected>Toggle AR Overlay</option>
+                    <option value="screenshot">Take Screenshot</option>
+                    <option value="none">None</option>
+                  </select>
+                </div>
+                <div class="binding-row">
+                  <span class="gesture-icon">✊</span>
+                  <span class="gesture-name">Fist Gesture</span>
+                  <select id="select-fist" class="binding-select">
+                    <option value="privacy-mask" selected>Instant Privacy Mask</option>
+                    <option value="recalibrate">Recalibrate BG</option>
+                    <option value="none">None</option>
+                  </select>
+                </div>
+                <div class="binding-row">
+                  <span class="gesture-icon">✌️</span>
+                  <span class="gesture-name">Victory / Peace</span>
+                  <select id="select-victory" class="binding-select">
+                    <option value="screenshot" selected>Take Screenshot</option>
+                    <option value="mode-toggle">Toggle Privacy Mode</option>
+                    <option value="none">None</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB CONTENT: MEDIA & RECORDER -->
+          <div class="tab-content" id="tab-media">
+            <div class="control-card">
+              <h3>EXPORT CANVAS RECORDER</h3>
+              <p class="control-desc">Capture and record live video filters or take full-resolution screen snapshots.</p>
+              
+              <div class="export-btn-group">
+                <button id="btn-screenshot" class="action-btn border-cyan">
+                  📸 Capture Snapshot
+                </button>
+                <button id="btn-record" class="action-btn glow-red">
+                  🔴 Start WebM Recording
+                </button>
+              </div>
+              <p id="recording-status" class="recording-desc-idle">Capture engine ready</p>
+            </div>
+          </div>
+
+        </section>
+      </main>
+    </div>
+
+    <!-- Main Module Script -->
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

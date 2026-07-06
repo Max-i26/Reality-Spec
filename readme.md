@@ -1,104 +1,63 @@
-# RealityFrame
+# RealityFrame // Web Hub 🌐
 
-RealityFrame is a real-time computer vision project built with Python, OpenCV, and MediaPipe. It combines gesture recognition, background reconstruction, selective invisibility, and AR effects to create an interactive privacy and visual effects system.
+RealityFrame Web is a futuristic, hardware-accelerated computer vision and augmented reality webcam privacy dashboard running directly in the browser. Rebuilt from the ground up from the original command-line Python tools, it brings robust real-time hand-tracking gestures, virtual privacy filters (such as Portal and Full-body invisibility), custom 3D Three.js HUDs, and video capture directly to the web.
 
-## Features
+---
 
-* Gesture-controlled invisibility modes
-* Partial invisibility using pinch/snap gesture
-* Full invisibility using L-hand gesture
-* Custom focus area selection
-* Real-time background reconstruction
-* AR overlay support
-* Smooth blending and masking effects
+## 🚀 Key Features
 
-## Practical Uses
+*   **Real-Time Privacy Modes**:
+    *   **Normal**: Clean pass-through webcam output.
+    *   **Portal Invisibility**: Interactively define a window in your view where you are rendered invisible against a captured room background.
+    *   **Full Invisibility**: Disappear entirely from the camera's sight while retaining full movement capabilities.
+*   **Augmented Reality (AR) Overlays**:
+    *   **Creeper Pixel Mask**: Retro-pixelated face mask.
+    *   **Cyber HUD**: High-tech sci-fi tracking overlay on your hands.
+    *   **Orbit 3D**: Dynamic 3D holographic wireframes orbiting your palms, rendered via Three.js.
+*   **Gesture Control Bindings**:
+    *   Bind specific gestures (like Thumbs Up, Victory, Fist, Pinch) to trigger instant actions (toggle AR filters, take screenshots, toggle privacy modes).
+*   **Built-in Media Recorder**:
+    *   Record and download your customized webcam canvas stream instantly.
 
-### Online Meetings
+---
 
-Keep only your workspace visible while hiding distractions around you. This can prevent people walking behind you from appearing on camera and helps maintain privacy during calls.
+## 🛠️ How to Run Locally
 
-### Content Creation
+### Prerequisites
+Make sure you have [Node.js](https://nodejs.org/) installed (recommended: Node 20.19.0 LTS or newer).
 
-Create unique visual effects and selective visibility regions without requiring a green screen.
+### Installation
 
-### Privacy Enhancement
+1. Clone this repository (or copy the files) and navigate into the project directory:
+   ```bash
+   cd Reality-Spec
+   ```
 
-Hide unwanted areas of a room while keeping important objects or workspaces visible.
+2. Install the package dependencies:
+   ```bash
+   npm install
+   ```
 
-## Controls
+### Running the Development Server
 
-| Action                | Control              |
-| --------------------- | -------------------- |
-| Partial Invisibility  | Pinch / Snap Gesture |
-| Full Invisibility     | L-Hand Gesture       |
-| Start Focus Selection | F                    |
-| Select Visible Region | 4 Mouse Clicks       |
-| Reset Selection       | R                    |
-| Quit Application      | Q                    |
+1. Start the local development server:
+   ```bash
+   npm run dev
+   ```
+   *Alternatively, run on a specific port and IPv4 binding:*
+   ```bash
+   npx vite --port 8080 --host 127.0.0.1
+   ```
 
-## Project Structure
+2. Open your web browser and go to:
+   **[http://127.0.0.1:8080/](http://127.0.0.1:8080/)**
 
-```text
-RealityFrame/
-│
-├── ar/
-│   ├── ar_renderer.py
-│   ├── overlay_factory.py
-│   └── target_tracker.py
-│
-├── assets/
-│   └── marker_0.png
-│
-├── core/
-│   └── background.py
-│
-├── graphics/
-│   └── renderer.py
-│
-├── tools/
-│   ├── generate_marker.py
-│   └── test_marker.py
-│
-├── vision/
-│   ├── gesture.py
-│   ├── hand_tracker.py
-│   └── portal_detector.py
-│
-├── main.py
-└── requirements.txt
-```
+---
 
-## Technologies Used
+## 📦 Production Build
 
-* Python
-* OpenCV
-* MediaPipe
-* NumPy
-* Computer Vision
-* Image Processing
-* Gesture Recognition
-
-## Installation
-
+To compile and minify the project for production deployment, run:
 ```bash
-git clone https://github.com/yourusername/RealityFrame.git
-cd RealityFrame
-pip install -r requirements.txt
+npm run build
 ```
-
-## Run
-
-```bash
-python main.py
-```
-
-## Future Improvements
-
-* Advanced AR object placement
-* Multi-user tracking
-* Additional gesture controls
-* Improved segmentation quality
-* Object-specific invisibility modes
-
-Built as an exploration of real-time computer vision, gesture interaction, privacy-focused camera systems, and augmented reality concepts.
+This generates a highly optimized production bundle inside the `dist/` directory.

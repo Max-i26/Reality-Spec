@@ -10,7 +10,7 @@ from PIL import Image
 st.set_page_config(page_title="AI Privacy Webcam Center", layout="wide")
 
 st.title("🛡️ AI Privacy Webcam Center (Streamlit)")
-st.write("An interactive computer vision workspace combining hand-tracking gestures, invisible cloak masking, background blur, and custom background images.")
+st.write("An interactive computer vision workspace combining hand-tracking gestures, invisible portals, background blur, and custom background images.")
 
 # Initialize MediaPipe models in session state so they only load once
 if "hand_detector" not in st.session_state:
@@ -45,7 +45,13 @@ mirror_mode = st.sidebar.checkbox("Mirror Output")
 st.sidebar.subheader("Effects")
 bg_mode = st.sidebar.selectbox(
     "Background Layer",
-    ["Default Feed", "Invisible Cloak (Needs Calibration)", "AI Background Blur", "Custom Background Image"]
+    [
+        "Default Feed", 
+        "Invisible Cloak (Full Body)", 
+        "Invisible Portal (Hand Controlled)", 
+        "AI Background Blur", 
+        "Custom Background Image"
+    ]
 )
 
 # Render specific options depending on the mode chosen
@@ -80,8 +86,12 @@ with col_diagnostics:
     st.markdown("""
     **Instructions:**
     1. **Mirror**: Check the Box to mirror the camera.
-    2. **Invisible Cloak**: Select this mode, step completely out of frame, click **Calibrate Background Room**, and step back in to disappear!
-    3. **Background Blur / Image**: Uses AI Selfie Segmentation to isolate you and blur or replace the background.
+    2. **Invisible Cloak (Full Body)**: Select this mode, step completely out of frame, click **Calibrate Background Room**, and step back in to disappear!
+    3. **Invisible Portal (Hand Controlled)**: 
+       * Step out of frame and click **Calibrate Background Room**.
+       * Hold up your hand. The portal circle is centered on your hand.
+       * **Pinch/Expand your index and thumb** closer or further apart to decrease/increase the size of your invisibility portal!
+    4. **Background Blur / Image**: Uses AI Selfie Segmentation to isolate you and blur or replace the background.
     """)
 
 # Custom Background Loader
@@ -134,19 +144,54 @@ if run_cam:
         if bg_mode in ["AI Background Blur", "Custom Background Image"]:
             segmentation_results = st.session_state.segmenter.segment(mp_image)
             category_mask = segmentation_results.category_mask.numpy_view()
-            # Category mask yields ~1.0 for the person, ~0.0 for background
-            segment_mask = category_mask > 0.5
+            # Squeeze to handle potential 4D/3D shapes from different SDK versions
+            segment_mask = np.squeeze(category_mask) > 0.5
 
         # 3. Assemble Output Frame
         output_frame = frame.copy()
 
-        if bg_mode == "Invisible Cloak (Needs Calibration)":
+        # Handle full body cloak
+        if bg_mode == "Invisible Cloak (Full Body)":
             if st.session_state.calibrated_bg is not None:
-                # Disappear behind empty room snapshot
                 output_frame = st.session_state.calibrated_bg.copy()
             else:
                 st.warning("⚠️ Calibrate background first in the sidebar!")
         
+        # Handle hand-controlled portal
+        elif bg_mode == "Invisible Portal (Hand Controlled)":
+            if st.session_state.calibrated_bg is not None:
+                # Default to normal frame
+                output_frame = frame.copy()
+                
+                # Check if hand detected to place and size the portal
+                if hand_results.hand_landmarks:
+                    for hand_landmarks in hand_results.hand_landmarks:
+                        # Index tip is center of portal
+                        index_tip = hand_landmarks[8]
+                        cx, cy = int(index_tip.x * w), int(index_tip.y * h)
+                        
+                        # Use distance between thumb (4) and index (8) to control radius
+                        thumb_tip = hand_landmarks[4]
+                        pinch_dist = np.hypot(thumb_tip.x - index_tip.x, thumb_tip.y - index_tip.y)
+                        
+                        # Scale pinch distance to radius in pixels (min: 20px, max: 300px)
+                        portal_radius = int(np.clip(pinch_dist * 600, 20, 300))
+                        
+                        # Create circular mask for portal
+                        y_indices, x_indices = np.ogrid[:h, :w]
+                        dist_from_center = (x_indices - cx)**2 + (y_indices - cy)**2
+                        portal_mask = dist_from_center <= portal_radius**2
+                        
+                        # Replace area inside circular portal with calibrated background
+                        output_frame = np.where(portal_mask[:, :, None], st.session_state.calibrated_bg, frame)
+                        
+                        # Draw a glowing green border around the portal
+                        cv2.circle(output_frame, (cx, cy), portal_radius, (0, 255, 136), 2)
+                        cv2.putText(output_frame, f"Portal Radius: {portal_radius}px", (cx - 50, cy - portal_radius - 10),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 136), 1)
+            else:
+                st.warning("⚠️ Calibrate background first in the sidebar!")
+
         elif bg_mode == "AI Background Blur" and segment_mask is not None:
             # Blur the background
             blurred_bg = cv2.GaussianBlur(frame, (blur_amount, blur_amount), 0)
@@ -168,7 +213,7 @@ if run_cam:
             for hand_landmarks in hand_results.hand_landmarks:
                 index_tip = hand_landmarks[8]
                 cx, cy = int(index_tip.x * w), int(index_tip.y * h)
-                cv2.circle(output_frame, (cx, cy), 12, (0, 255, 136), -1)
+                cv2.circle(output_frame, (cx, cy), 8, (0, 255, 136), -1)
 
                 # Open/Close Gesture Text
                 thumb_tip = hand_landmarks[4]

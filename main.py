@@ -1,14 +1,24 @@
 import cv2
 import mediapipe as mp
 import numpy as np
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
 
 def main():
+    # Path to the pre-downloaded hand landmarker task file
+    model_path = 'public/models/hand_landmarker.task'
+    
+    # Initialize the MediaPipe Hand Landmarker Tasks API
+    base_options = python.BaseOptions(model_asset_path=model_path)
+    options = vision.HandLandmarkerOptions(
+        base_options=base_options,
+        num_hands=1,
+        min_hand_detection_confidence=0.7
+    )
+    detector = vision.HandLandmarker.create_from_options(options)
+
     # 0 is usually the default built-in webcam
     cap = cv2.VideoCapture(0)
-
-    # Initialize MediaPipe Hands solution
-    mp_hands = mp.solutions.hands
-    hands = mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.7)
 
     # App States
     is_mirrored = False
@@ -46,9 +56,12 @@ def main():
         if is_mirrored:
             frame = cv2.flip(frame, 1)
 
-        # Process hand landmarks with MediaPipe
+        # Convert frame to RGB and wrap inside MediaPipe Image format
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = hands.process(rgb_frame)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+        
+        # Detect hand landmarks
+        results = detector.detect(mp_image)
 
         # Determine target background mode
         output_frame = frame.copy()
@@ -60,18 +73,18 @@ def main():
             output_frame = virtual_bg.copy()
 
         # 2. Draw Hand Landmark Indicators
-        if results.multi_hand_landmarks:
-            for hand_landmarks in results.multi_hand_landmarks:
+        if results.hand_landmarks:
+            for hand_landmarks in results.hand_landmarks:
                 # Find Index Tip coordinates (landmark index 8)
-                index_tip = hand_landmarks.landmark[8]
+                index_tip = hand_landmarks[8]
                 cx, cy = int(index_tip.x * w), int(index_tip.y * h)
                 
                 # Draw a green tracking circle on fingertip
                 cv2.circle(output_frame, (cx, cy), 12, (0, 255, 136), -1)
 
                 # Simple Gesture logic: Detect if hand is fully open
-                thumb_tip = hand_landmarks.landmark[4]
-                pinky_tip = hand_landmarks.landmark[20]
+                thumb_tip = hand_landmarks[4]
+                pinky_tip = hand_landmarks[20]
                 dist = np.hypot(thumb_tip.x - pinky_tip.x, thumb_tip.y - pinky_tip.y)
                 
                 if dist > 0.4:

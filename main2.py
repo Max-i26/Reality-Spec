@@ -5,130 +5,177 @@ import pyvirtualcam
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
-def main():
-    # Path to the pre-downloaded hand landmarker task file
-    model_path = 'public/models/hand_landmarker.task'
-    
-    # Initialize the MediaPipe Hand Landmarker Tasks API
-    base_options = python.BaseOptions(model_asset_path=model_path)
-    options = vision.HandLandmarkerOptions(
-        base_options=base_options,
-        num_hands=1,
-        min_hand_detection_confidence=0.7
-    )
-    detector = vision.HandLandmarker.create_from_options(options)
+def draw_hud_box(img, x1, y1, x2, y2, color=(0, 229, 255), bracket_len=20, thickness=2):
+    cv2.rectangle(img, (x1, y1), (x2, y2), color, 1)
+    cv2.line(img, (x1, y1), (x1 + bracket_len, y1), color, thickness)
+    cv2.line(img, (x1, y1), (x1, y1 + bracket_len), color, thickness)
+    cv2.line(img, (x2, y1), (x2 - bracket_len, y1), color, thickness)
+    cv2.line(img, (x2, y1), (x2, y1 + bracket_len), color, thickness)
+    cv2.line(img, (x1, y2), (x1 + bracket_len, y2), color, thickness)
+    cv2.line(img, (x1, y2), (x1, y2 - bracket_len), color, thickness)
+    cv2.line(img, (x2, y2), (x2 - bracket_len, y2), color, thickness)
+    cv2.line(img, (x2, y2), (x2, y2 - bracket_len), color, thickness)
 
-    # 0 is usually the default built-in webcam
+def main():
+    hand_model_path = 'public/models/hand_landmarker.task'
+    segmenter_model_path = 'public/models/selfie_segmenter.task'
+
+    # Initialize Hand Landmarker tracking 2 hands
+    hand_base_options = python.BaseOptions(model_asset_path=hand_model_path)
+    hand_options = vision.HandLandmarkerOptions(
+        base_options=hand_base_options,
+        num_hands=2,
+        min_hand_detection_confidence=0.6,
+        min_hand_presence_confidence=0.6
+    )
+    hand_detector = vision.HandLandmarker.create_from_options(hand_options)
+
+    # Initialize Selfie Segmenter
+    seg_base_options = python.BaseOptions(model_asset_path=segmenter_model_path)
+    seg_options = vision.ImageSegmenterOptions(
+        base_options=seg_base_options,
+        running_mode=vision.RunningMode.IMAGE,
+        output_confidence_masks=True
+    )
+    segmenter = vision.ImageSegmenter.create_from_options(seg_options)
+
     cap = cv2.VideoCapture(0)
 
-    # App States
-    is_mirrored = False
-    is_invisible = False
-    use_bg_image = False
-    
-    background_frame = None  # Captured room background
-    virtual_bg = None        # Loaded custom background image
+    # Modes: 'normal', 'invisibility', 'portal', 'virtual_bg'
+    active_mode = 'normal'
+    is_mirrored = True
+    background_frame = None
 
-    # Create a custom digital background (solid deep-space blue/red color)
-    # You can also load an image using: virtual_bg = cv2.imread('your_image.jpg')
+    # Virtual Background Gradient
     virtual_bg = np.zeros((480, 640, 3), dtype=np.uint8)
-    virtual_bg[:] = [80, 20, 20]  # dark blue/red tone
+    for y in range(480):
+        virtual_bg[y, :] = [int(130 * (y / 480)), int(25 * (1 - y / 480)), int(180 * (y / 480))]
 
     print("\n=== AI Virtual Camera Controller (main2.py) ===")
-    print("Keyboard Controls (Keep the preview window focused):")
+    print("Keyboard Shortcuts:")
     print("  'm' : Toggle Mirror Mode")
-    print("  'c' : Calibrate (Capture empty room background - step out of frame first!)")
-    print("  'i' : Toggle Invisibility Shield")
-    print("  'b' : Toggle Virtual Background")
+    print("  'c' : Calibrate Room Background (Step out of view first)")
+    print("  'i' : Full Face & Body Invisibility Cloak")
+    print("  'p' : Dual-Hand Invisibility Portal Box (Spread hands to resize)")
+    print("  'b' : Virtual Background")
     print("  'q' : Quit Application")
     print("==============================================\n")
 
-    # Start the Virtual Camera wrapper (defaults to OBS Virtual Camera, Unity Capture, etc.)
     with pyvirtualcam.Camera(width=640, height=480, fps=30) as cam:
         print(f"Virtual camera started successfully: {cam.device}")
-        print("You can now open Zoom/Discord/Teams and choose this virtual camera device!")
+        print("Select this virtual camera in Zoom / Discord / Teams settings!")
 
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
-                print("Unable to fetch webcam feed.")
                 break
 
-            # Resize for consistent dimensions
             frame = cv2.resize(frame, (640, 480))
             h, w, c = frame.shape
 
-            # 1. Mirror Mode
             if is_mirrored:
                 frame = cv2.flip(frame, 1)
 
-            # Convert frame to RGB and wrap inside MediaPipe Image format
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
-            
-            # Detect hand landmarks
-            results = detector.detect(mp_image)
 
-            # Determine target background mode
+            # 1. Dual-Hand Tracking
+            hand_results = hand_detector.detect(mp_image)
+
+            # 2. Complete Face & Body Mask
+            person_mask = None
+            if active_mode in ['invisibility', 'virtual_bg']:
+                seg_results = segmenter.segment(mp_image)
+                conf_mask = np.squeeze(seg_results.confidence_masks[0].numpy_view())
+                raw_mask = conf_mask > 0.42
+                kernel = np.ones((5, 5), np.uint8)
+                person_mask = cv2.dilate(raw_mask.astype(np.uint8), kernel, iterations=1).astype(bool)
+
             output_frame = frame.copy()
-            if is_invisible and background_frame is not None:
-                # Full invisibility: replace output frame pixels with captured background
-                output_frame = background_frame.copy()
-            elif use_bg_image and virtual_bg is not None:
-                # Swap background completely
-                output_frame = virtual_bg.copy()
 
-            # 2. Draw Hand Landmark Indicators
-            if results.hand_landmarks:
-                for hand_landmarks in results.hand_landmarks:
-                    # Find Index Tip coordinates (landmark index 8)
-                    index_tip = hand_landmarks[8]
-                    cx, cy = int(index_tip.x * w), int(index_tip.y * h)
-                    
-                    # Draw a green tracking circle on fingertip
-                    cv2.circle(output_frame, (cx, cy), 12, (0, 255, 136), -1)
+            # Mode: Full Invisibility
+            if active_mode == 'invisibility':
+                if background_frame is not None and person_mask is not None:
+                    output_frame = np.where(person_mask[:, :, None], background_frame, frame)
+                else:
+                    cv2.putText(output_frame, "PRESS 'C' TO CALIBRATE ROOM FIRST!", (40, 240),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
-                    # Simple Gesture logic: Detect if hand is fully open
-                    thumb_tip = hand_landmarks[4]
-                    pinky_tip = hand_landmarks[20]
-                    dist = np.hypot(thumb_tip.x - pinky_tip.x, thumb_tip.y - pinky_tip.y)
-                    
-                    if dist > 0.4:
-                        cv2.putText(output_frame, "PALM TRACKED: OPEN", (20, 50), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 136), 2)
+            # Mode: Dual-Hand / Single-Hand Invisibility Portal Box
+            elif active_mode == 'portal':
+                if background_frame is not None:
+                    bx1, by1, bx2, by2 = 0, 0, 0, 0
+                    portal_found = False
+                    num_hands = len(hand_results.hand_landmarks) if hand_results.hand_landmarks else 0
 
-            # 3. Render Status Overlay text at the bottom
-            status_text = f"Mirror: {is_mirrored} | Invisibility: {is_invisible} | VirtualBg: {use_bg_image}"
-            cv2.putText(output_frame, status_text, (20, 450), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                    if num_hands >= 2:
+                        h1 = hand_results.hand_landmarks[0][8]
+                        h2 = hand_results.hand_landmarks[1][8]
+                        xa, ya = int(h1.x * w), int(h1.y * h)
+                        xb, yb = int(h2.x * w), int(h2.y * h)
 
-            # 4. Display preview window locally (needed to capture keypresses)
-            cv2.imshow("AI Virtual Camera Preview", output_frame)
+                        bx1 = max(0, min(xa, xb) - 15)
+                        by1 = max(0, min(ya, yb) - 15)
+                        bx2 = min(w, max(xa, xb) + 15)
+                        by2 = min(h, max(ya, yb) + 15)
+                        portal_found = True
+                    elif num_hands == 1:
+                        hand = hand_results.hand_landmarks[0]
+                        cx, cy = int(hand[8].x * w), int(hand[8].y * h)
+                        pinch = np.hypot(hand[4].x - hand[8].x, hand[4].y - hand[8].y)
+                        sz = int(np.clip(pinch * 800, 50, 360))
+                        bx1 = max(0, cx - sz // 2)
+                        by1 = max(0, cy - sz // 2)
+                        bx2 = min(w, cx + sz // 2)
+                        by2 = min(h, cy + sz // 2)
+                        portal_found = True
 
-            # 5. Output frame to Virtual Camera (requires RGB format)
+                    if portal_found and (bx2 > bx1 + 10) and (by2 > by1 + 10):
+                        output_frame[by1:by2, bx1:bx2] = background_frame[by1:by2, bx1:bx2]
+                        draw_hud_box(output_frame, bx1, by1, bx2, by2)
+                else:
+                    cv2.putText(output_frame, "PRESS 'C' TO CALIBRATE ROOM FIRST!", (40, 240),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+
+            # Mode: Virtual Background
+            elif active_mode == 'virtual_bg':
+                if person_mask is not None:
+                    output_frame = np.where(person_mask[:, :, None], frame, virtual_bg)
+
+            # Draw Hand Tracking Points
+            if hand_results.hand_landmarks:
+                for hand_idx, hand_landmarks in enumerate(hand_results.hand_landmarks):
+                    color = (0, 229, 255) if hand_idx == 0 else (168, 85, 247)
+                    cx, cy = int(hand_landmarks[8].x * w), int(hand_landmarks[8].y * h)
+                    cv2.circle(output_frame, (cx, cy), 9, color, -1)
+
+            # Bottom HUD Status
+            status_txt = f"VirtualCam: {active_mode.upper()}"
+            cv2.putText(output_frame, status_txt, (20, 460),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+
+            # Preview Window
+            cv2.imshow("Reality-Spec Virtual Camera Preview", output_frame)
+
+            # Stream to virtual camera driver
             virtual_cam_frame = cv2.cvtColor(output_frame, cv2.COLOR_BGR2RGB)
             cam.send(virtual_cam_frame)
             cam.sleep_until_next_frame()
 
-            # Listen for key presses
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
                 break
             elif key == ord('m'):
                 is_mirrored = not is_mirrored
             elif key == ord('c'):
-                # Copy current clean frame
                 background_frame = frame.copy()
-                print("Room background calibrated/captured!")
+                print("Background room calibrated!")
             elif key == ord('i'):
-                if background_frame is None:
-                    print("Warning: Press 'c' first to capture the room background!")
-                else:
-                    is_invisible = not is_invisible
-                    use_bg_image = False
+                active_mode = 'normal' if active_mode == 'invisibility' else 'invisibility'
+            elif key == ord('p'):
+                active_mode = 'normal' if active_mode == 'portal' else 'portal'
             elif key == ord('b'):
-                use_bg_image = not use_bg_image
-                is_invisible = False
+                active_mode = 'normal' if active_mode == 'virtual_bg' else 'virtual_bg'
 
     cap.release()
     cv2.destroyAllWindows()

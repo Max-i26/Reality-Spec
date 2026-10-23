@@ -1,0 +1,7 @@
+# Python Dependencies for Reality-Spec
+opencv-python>=4.10.0
+mediapipe>=1.0.1
+numpy>=1.26.0
+streamlit>=1.35.0
+pyvirtualcam>=0.11.0
+pillow>=10.0.0

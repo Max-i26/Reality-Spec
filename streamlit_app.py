@@ -7,10 +7,52 @@ from mediapipe.tasks.python import vision
 from PIL import Image
 
 # Set up Page Layout
-st.set_page_config(page_title="AI Privacy Webcam Center", layout="wide")
+st.set_page_config(page_title="AI Privacy Webcam Center", layout="wide", initial_sidebar_state="expanded")
 
 st.title("🛡️ AI Privacy Webcam Center (Streamlit)")
-st.write("An interactive computer vision workspace combining hand-tracking gestures, invisible portals, background blur, and custom background images.")
+st.caption("Real-time AI webcam powered by MediaPipe Tasks. True Body Invisibility, Background Replacement, Resizable Portals, and Hand Gestures.")
+
+# Background Preset Generators
+@st.cache_data
+def get_preset_bg(preset_name, w=640, h=480):
+    if preset_name == "Cyberpunk Neon":
+        bg = np.zeros((h, w, 3), dtype=np.uint8)
+        for y in range(h):
+            r = int(25 + 75 * (y / h))
+            g = int(10 + 25 * (1 - y / h))
+            b = int(70 + 130 * (y / h))
+            bg[y, :] = [b, g, r]
+        # Grid lines
+        for x in range(0, w, 40):
+            cv2.line(bg, (x, h - 140), (x, h), (180, 50, 180), 1)
+        for y in range(h - 140, h, 20):
+            cv2.line(bg, (0, y), (w, y), (180, 50, 180), 1)
+        return bg
+
+    elif preset_name == "Deep Space":
+        np.random.seed(42)
+        bg = np.zeros((h, w, 3), dtype=np.uint8)
+        bg[:] = [20, 10, 15]
+        cv2.circle(bg, (w // 2, h // 2), 160, (70, 20, 60), -1)
+        cv2.circle(bg, (w // 3, h // 3), 110, (40, 60, 20), -1)
+        bg = cv2.GaussianBlur(bg, (99, 99), 0)
+        for _ in range(120):
+            sx = int(np.random.randint(0, w))
+            sy = int(np.random.randint(0, h))
+            br = int(np.random.randint(150, 255))
+            cv2.circle(bg, (sx, sy), 1, (br, br, br), -1)
+        return bg
+
+    elif preset_name == "Modern Studio":
+        bg = np.zeros((h, w, 3), dtype=np.uint8)
+        for y in range(h):
+            ratio = y / h
+            bg[y, :] = [int(40 + 30 * ratio), int(45 + 35 * ratio), int(50 + 40 * ratio)]
+        cv2.circle(bg, (int(w * 0.75), int(h * 0.3)), 180, (90, 120, 140), -1)
+        bg = cv2.GaussianBlur(bg, (99, 99), 0)
+        return bg
+
+    return np.zeros((h, w, 3), dtype=np.uint8)
 
 # Initialize MediaPipe models in session state so they only load once
 if "hand_detector" not in st.session_state:
@@ -33,83 +75,95 @@ if "segmenter" not in st.session_state:
     )
     st.session_state.segmenter = vision.ImageSegmenter.create_from_options(options)
 
-# Persistent storage for background calibration frame
 if "calibrated_bg" not in st.session_state:
     st.session_state.calibrated_bg = None
 
 # Sidebar Controls
 st.sidebar.header("🎛️ Control Panel")
 run_cam = st.sidebar.checkbox("Start Webcam Feed", value=True)
-mirror_mode = st.sidebar.checkbox("Mirror Output")
+mirror_mode = st.sidebar.checkbox("Mirror Output", value=True)
 
-st.sidebar.subheader("Effects")
+st.sidebar.subheader("Effects Mode")
 bg_mode = st.sidebar.selectbox(
-    "Background Layer",
+    "Select Effect",
     [
-        "Default Feed", 
-        "Invisible Cloak (Full Body)", 
-        "Invisible Portal (Hand Controlled)", 
-        "AI Background Blur", 
-        "Custom Background Image"
+        "Default Feed",
+        "Body Invisibility Cloak (Vanishing Body)",
+        "Virtual Background (Image / Preset)",
+        "Invisible Portal (Hand Controlled)",
+        "AI Background Blur"
     ]
 )
 
-# Render specific options depending on the mode chosen
+# Effect parameter controls
+invisibility_opacity = 1.0
 blur_amount = 25
-if bg_mode == "AI Background Blur":
-    blur_amount = st.sidebar.slider("Blur Intensity", min_value=5, max_value=99, value=25, step=2)
-    # OpenCV requires odd kernel size for blur
+selected_preset = "Cyberpunk Neon"
+custom_bg_file = None
+
+if bg_mode == "Body Invisibility Cloak (Vanishing Body)":
+    invisibility_opacity = st.sidebar.slider(
+        "Cloak Opacity (100% = Completely Vanished, 50% = Ghost Camo)",
+        min_value=0.1, max_value=1.0, value=1.0, step=0.05
+    )
+
+elif bg_mode == "Virtual Background (Image / Preset)":
+    bg_source = st.sidebar.radio("Background Source", ["Built-in Presets", "Upload Custom Image"])
+    if bg_source == "Built-in Presets":
+        selected_preset = st.sidebar.selectbox("Choose Preset Backdrop", ["Cyberpunk Neon", "Deep Space", "Modern Studio"])
+    else:
+        custom_bg_file = st.sidebar.file_uploader("Upload Image (JPG/PNG)", type=["jpg", "png", "jpeg"])
+
+elif bg_mode == "AI Background Blur":
+    blur_amount = st.sidebar.slider("Blur Intensity", min_value=5, max_value=99, value=35, step=2)
     if blur_amount % 2 == 0:
         blur_amount += 1
 
-custom_bg_file = None
-if bg_mode == "Custom Background Image":
-    custom_bg_file = st.sidebar.file_uploader("Upload custom background image", type=["jpg", "png", "jpeg"])
-
-# Calibration Button (always visible in sidebar)
-if st.sidebar.button("📸 Calibrate Background Room"):
+# Room Calibration
+st.sidebar.subheader("📸 Room Calibration")
+st.sidebar.write("Step out of camera view, then click Calibrate:")
+if st.sidebar.button("Calibrate Empty Room"):
     st.session_state.calibrate_request = True
-    st.sidebar.success("Next frame will be saved as calibrated background room!")
 
-# Layout Columns
-col_video, col_diagnostics = st.columns([2, 1])
+# Main Layout
+col_video, col_info = st.columns([3, 1])
 
 with col_video:
-    st.subheader("🎥 Live AI Stream")
     image_placeholder = st.empty()
 
-with col_diagnostics:
-    st.subheader("📊 System Stats")
-    status_msg = st.empty()
-    status_msg.info("System Ready. Check 'Start Webcam Feed' to begin.")
+with col_info:
+    st.subheader("System Status")
+    status_box = st.empty()
+    status_box.info("Ready. Check 'Start Webcam Feed' to begin.")
     
     st.markdown("""
-    **Instructions:**
-    1. **Mirror**: Check the Box to mirror the camera.
-    2. **Invisible Cloak (Full Body)**: Select this mode, step completely out of frame, click **Calibrate Background Room**, and step back in to disappear!
-    3. **Invisible Portal (Hand Controlled)**: 
-       * Step out of frame and click **Calibrate Background Room**.
-       * Hold up your hand. The portal circle is centered on your hand.
-       * **Pinch/Expand your index and thumb** closer or further apart to decrease/increase the size of your invisibility portal!
-    4. **Background Blur / Image**: Uses AI Selfie Segmentation to isolate you and blur or replace the background.
+    ### 💡 Quick Guide:
+    * **Body Invisibility Cloak**:
+      1. Step out of the camera's view.
+      2. Click **Calibrate Empty Room** in the sidebar.
+      3. Step back in — **only your body disappears**, leaving the live room visible!
+    * **Virtual Background**:
+      * Instantly replaces your room background with Cyberpunk, Space, Studio, or your own image.
+    * **Invisible Portal**:
+      * Move your hand around.
+      * Pinch your index finger and thumb closer/further to resize the invisibility lens!
     """)
 
-# Custom Background Loader
+# Load custom background image if provided
 loaded_custom_bg = None
 if custom_bg_file is not None:
     try:
-        uploaded_img = Image.open(custom_bg_file)
-        loaded_custom_bg = cv2.cvtColor(np.array(uploaded_img), cv2.COLOR_RGB2BGR)
+        pil_img = Image.open(custom_bg_file)
+        loaded_custom_bg = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
     except Exception as e:
-        st.error(f"Error loading background image: {e}")
+        st.error(f"Error reading uploaded image: {e}")
 
-# Webcam Loop
+# Video processing loop
 if run_cam:
     cap = cv2.VideoCapture(0)
-    
-    # Check if webcam opened successfully
+
     if not cap.isOpened():
-        st.error("Error: Could not access the webcam.")
+        st.error("Error: Could not access the webcam. Check if another app is using it.")
         run_cam = False
 
     while run_cam:
@@ -118,120 +172,113 @@ if run_cam:
             st.error("Error: Failed to read frame from webcam.")
             break
 
-        # Resize for consistent layout dimensions
         frame = cv2.resize(frame, (640, 480))
         h, w, c = frame.shape
 
-        # Mirror Mode
         if mirror_mode:
             frame = cv2.flip(frame, 1)
 
-        # Trigger calibration if button was pressed
+        # Handle calibration request
         if getattr(st.session_state, "calibrate_request", False):
             st.session_state.calibrated_bg = frame.copy()
             st.session_state.calibrate_request = False
             st.toast("Room calibrated successfully!")
 
-        # Wrap in MediaPipe Image format
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
 
-        # 1. Processing Hand Tracking
+        # 1. Hand Tracking
         hand_results = st.session_state.hand_detector.detect(mp_image)
 
-        # 2. Processing Selfie Segmentation Mask (if needed for blur/swap)
+        # 2. Body Segmentation Mask (needed for Invisibility Cloak, Virtual Background, and Blur)
         segment_mask = None
-        if bg_mode in ["AI Background Blur", "Custom Background Image"]:
-            segmentation_results = st.session_state.segmenter.segment(mp_image)
-            category_mask = segmentation_results.category_mask.numpy_view()
-            # Squeeze to handle potential 4D/3D shapes from different SDK versions
-            segment_mask = np.squeeze(category_mask) > 0.5
+        if bg_mode in [
+            "Body Invisibility Cloak (Vanishing Body)",
+            "Virtual Background (Image / Preset)",
+            "AI Background Blur"
+        ]:
+            seg_result = st.session_state.segmenter.segment(mp_image)
+            cat_mask = seg_result.category_mask.numpy_view()
+            segment_mask = np.squeeze(cat_mask) > 0.5
 
-        # 3. Assemble Output Frame
         output_frame = frame.copy()
 
-        # Handle full body cloak
-        if bg_mode == "Invisible Cloak (Full Body)":
+        # Effect 1: Body Invisibility Cloak (True Invisibility: Body disappears into calibrated room)
+        if bg_mode == "Body Invisibility Cloak (Vanishing Body)":
             if st.session_state.calibrated_bg is not None:
-                output_frame = st.session_state.calibrated_bg.copy()
+                if segment_mask is not None:
+                    calibrated = st.session_state.calibrated_bg
+                    if invisibility_opacity >= 0.98:
+                        # Full invisibility of body
+                        output_frame = np.where(segment_mask[:, :, None], calibrated, frame)
+                    else:
+                        # Semi-transparent Ghost / Predator camo effect
+                        ghost = cv2.addWeighted(frame, 1.0 - invisibility_opacity, calibrated, invisibility_opacity, 0)
+                        output_frame = np.where(segment_mask[:, :, None], ghost, frame)
             else:
-                st.warning("⚠️ Calibrate background first in the sidebar!")
-        
-        # Handle hand-controlled portal
+                st.warning("⚠️ Please click 'Calibrate Empty Room' in the sidebar first!")
+
+        # Effect 2: Virtual Background (Body stays visible, room replaced)
+        elif bg_mode == "Virtual Background (Image / Preset)":
+            if segment_mask is not None:
+                if loaded_custom_bg is not None:
+                    target_bg = cv2.resize(loaded_custom_bg, (w, h))
+                else:
+                    target_bg = get_preset_bg(selected_preset, w, h)
+
+                output_frame = np.where(segment_mask[:, :, None], frame, target_bg)
+
+        # Effect 3: Invisible Portal (Hand-Controlled Lens)
         elif bg_mode == "Invisible Portal (Hand Controlled)":
             if st.session_state.calibrated_bg is not None:
-                # Default to normal frame
-                output_frame = frame.copy()
-                
-                # Check if hand detected to place and size the portal
                 if hand_results.hand_landmarks:
                     for hand_landmarks in hand_results.hand_landmarks:
-                        # Index tip is center of portal
                         index_tip = hand_landmarks[8]
                         cx, cy = int(index_tip.x * w), int(index_tip.y * h)
-                        
-                        # Use distance between thumb (4) and index (8) to control radius
+
                         thumb_tip = hand_landmarks[4]
                         pinch_dist = np.hypot(thumb_tip.x - index_tip.x, thumb_tip.y - index_tip.y)
-                        
-                        # Scale pinch distance to radius in pixels (min: 20px, max: 300px)
-                        portal_radius = int(np.clip(pinch_dist * 600, 20, 300))
-                        
-                        # Create circular mask for portal
-                        y_indices, x_indices = np.ogrid[:h, :w]
-                        dist_from_center = (x_indices - cx)**2 + (y_indices - cy)**2
-                        portal_mask = dist_from_center <= portal_radius**2
-                        
-                        # Replace area inside circular portal with calibrated background
+                        portal_radius = int(np.clip(pinch_dist * 600, 25, 300))
+
+                        y_idx, x_idx = np.ogrid[:h, :w]
+                        dist_sq = (x_idx - cx)**2 + (y_idx - cy)**2
+                        portal_mask = dist_sq <= portal_radius**2
+
                         output_frame = np.where(portal_mask[:, :, None], st.session_state.calibrated_bg, frame)
-                        
-                        # Draw a glowing green border around the portal
                         cv2.circle(output_frame, (cx, cy), portal_radius, (0, 255, 136), 2)
-                        cv2.putText(output_frame, f"Portal Radius: {portal_radius}px", (cx - 50, cy - portal_radius - 10),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 136), 1)
+                        cv2.putText(output_frame, f"Portal: {portal_radius}px", (cx - 40, max(20, cy - portal_radius - 8)),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 136), 1)
             else:
-                st.warning("⚠️ Calibrate background first in the sidebar!")
+                st.warning("⚠️ Please click 'Calibrate Empty Room' in the sidebar first!")
 
-        elif bg_mode == "AI Background Blur" and segment_mask is not None:
-            # Blur the background
-            blurred_bg = cv2.GaussianBlur(frame, (blur_amount, blur_amount), 0)
-            output_frame = np.where(segment_mask[:, :, None], frame, blurred_bg)
+        # Effect 4: AI Background Blur
+        elif bg_mode == "AI Background Blur":
+            if segment_mask is not None:
+                blurred = cv2.GaussianBlur(frame, (blur_amount, blur_amount), 0)
+                output_frame = np.where(segment_mask[:, :, None], frame, blurred)
 
-        elif bg_mode == "Custom Background Image" and segment_mask is not None:
-            if loaded_custom_bg is not None:
-                # Resize custom background to match stream
-                resized_custom_bg = cv2.resize(loaded_custom_bg, (w, h))
-                output_frame = np.where(segment_mask[:, :, None], frame, resized_custom_bg)
-            else:
-                # Fallback to simple colored background
-                fallback_bg = np.zeros_like(frame)
-                fallback_bg[:] = [120, 30, 30] # deep slate blue/red
-                output_frame = np.where(segment_mask[:, :, None], frame, fallback_bg)
-
-        # 4. Draw Hand Landmarking Indicator
+        # Draw Hand Landmark Indicator
         if hand_results.hand_landmarks:
             for hand_landmarks in hand_results.hand_landmarks:
                 index_tip = hand_landmarks[8]
                 cx, cy = int(index_tip.x * w), int(index_tip.y * h)
                 cv2.circle(output_frame, (cx, cy), 8, (0, 255, 136), -1)
 
-                # Open/Close Gesture Text
                 thumb_tip = hand_landmarks[4]
                 pinky_tip = hand_landmarks[20]
                 dist = np.hypot(thumb_tip.x - pinky_tip.x, thumb_tip.y - pinky_tip.y)
                 if dist > 0.4:
-                    cv2.putText(output_frame, "PALM TRACKED: OPEN", (20, 50), 
+                    cv2.putText(output_frame, "OPEN PALM DETECTED", (20, 50),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 136), 2)
-                    status_msg.success("Hand Gesture: Open Palm detected!")
+                    status_box.success("Palm: Open")
                 else:
-                    status_msg.info("Hand Gesture: Tracking Palm...")
+                    status_box.info("Palm: Tracking Active")
         else:
-            status_msg.warning("No Hands Detected in frame.")
+            status_box.warning("No Hands in view.")
 
-        # Convert back to RGB for display in Streamlit
         st_frame = cv2.cvtColor(output_frame, cv2.COLOR_BGR2RGB)
         image_placeholder.image(st_frame, channels="RGB")
 
     cap.release()
 else:
-    status_msg.info("Webcam feed stopped.")
+    status_box.info("Webcam paused.")
